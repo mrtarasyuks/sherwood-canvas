@@ -1,5 +1,5 @@
 // Scoring tests for docs/season.js. Run: node scripts/test-season.mjs
-import { score, seasonOf, seasonStart, prize, SEASON1_START, WEEK } from "../docs/season.js";
+import { score, seasonOf, seasonStart, SEASON1_START, WEEK, HOLDER_BONUS, holdersByWeek } from "../docs/season.js";
 
 let pass = 0, fail = 0;
 const check = (name, ok, info = "") => { ok ? pass++ : fail++; console.log(`${ok ? "PASS" : "FAIL"}  ${name}${info ? "  — " + info : ""}`); };
@@ -50,8 +50,28 @@ check("quiet week 3 still counts holdings", r(s4.get(3), C).held === 2 && r(s4.g
 check("running week 4 has live holdings", r(s4.get(4), C).points === 2);
 check("quiet week pool = 0", s4.get(3).pool === 0n);
 
-// prizes
-check("prize split 50/30/20", prize({ pool: 1000n }, 0) === 500n && prize({ pool: 1000n }, 1) === 300n && prize({ pool: 1000n }, 2) === 200n && prize({ pool: 1000n }, 3) === 0n);
+// $SHRWD holders: ×2, per season
+const h = score(events, 2, new Set([K]), new Map([[2, new Set([Bo])]]));
+check("holder bonus is ×2", HOLDER_BONUS === 2);
+check("w2 holder Bo doubled 2 → 4", r(h.get(2), Bo).base === 2 && r(h.get(2), Bo).points === 4 && r(h.get(2), Bo).holder);
+check("w2 non-holder C unchanged", r(h.get(2), C).points === 6 && !r(h.get(2), C).holder);
+check("w1 has no holder set → no bonus", r(h.get(1), Bo).points === 6 && !r(h.get(1), Bo).holder);
+const h2 = score(events, 2, new Set([K]), new Map([[2, new Set([Bo, K])]]));
+check("bonus can flip the ranking", h.get(2).ranked.map((x) => x.addr).join() === [C, Bo].join() && score([ev(1, 0, A, null, B), ev(1, 1, A, null, B), ev(1, 2, A, null, B), ev(1, 3, C, null, B), ev(1, 4, C, null, B)], 1, new Set(), new Map([[1, new Set([C])]])).get(1).ranked[0].addr === C); // A 3+3=6 vs C (2+2)×2=8
+check("holder keeper still never ranks", !h2.get(2).ranked.some((x) => x.addr === K));
+
+// holders rebuilt from Transfer events
+const Z = "0x" + "0".repeat(40), CURVE = "0xcurve";
+const tx = (block, from, to, value) => ({ block: BigInt(block), from, to, value });
+const hw = holdersByWeek(
+  [tx(10, Z, CURVE, 1000n), tx(11, CURVE, A, 5n), tx(20, CURVE, Bo, 3n), tx(25, A, CURVE, 5n), tx(31, CURVE, C, 1n)],
+  [{ n: 1, end: 20n }, { n: 2, end: 30n }, { n: 3, end: null }],
+);
+const names = (n) => [...hw.get(n)].filter((a) => a !== CURVE).sort().join();
+check("week 1 holders: A", names(1) === A, names(1));
+check("week 2: A sold out, Bo bought", names(2) === Bo, names(2));
+check("running week includes the latest buy", names(3) === [Bo, C].sort().join(), names(3));
+check("zero address never a holder", ![...hw.get(3)].includes(Z));
 
 // tie-break: steals first
 const t = score([ev(1, 0, A, null, B), ev(1, 1, A, null, B), ev(1, 2, A, null, B), ev(1, 3, C, null, B), ev(1, 3, Bo, C, B)], 1).get(1);

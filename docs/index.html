@@ -4,12 +4,13 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Sherwood Canvas — on-chain pixel war on Robinhood Chain</title>
-  <meta name="description" content="A shared 64×64 canvas on Robinhood Chain. Paint a pixel, steal a pixel — when someone takes yours, you earn half." />
+  <meta name="description" content="A shared 64×64 canvas on Robinhood Chain. Paint a pixel, steal a pixel — when someone takes yours, you earn half. Hold $SHRWD for ×2 weekly points." />
   <meta property="og:title" content="Sherwood Canvas 🏹" />
-  <meta property="og:description" content="On-chain pixel war on Robinhood Chain testnet. Take pixels, earn when they're taken." />
+  <meta property="og:description" content="On-chain pixel war on Robinhood Chain testnet. Take pixels, earn when they're taken. Hold $SHRWD for ×2 points." />
   <meta property="og:image" content="https://mrtarasyuks.github.io/sherwood-canvas/shrwd.webp" />
   <meta name="twitter:card" content="summary_large_image" />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' fill='%230f3d2e'/><rect x='3' y='3' width='4' height='4' fill='%233ddc84'/><rect x='9' y='3' width='4' height='4' fill='%23f2c14e'/><rect x='3' y='9' width='4' height='4' fill='%23e8505b'/><rect x='9' y='9' width='4' height='4' fill='%235ab0ff'/></svg>" />
+  <meta name="theme-color" content="#0b0620" />
+  <link rel="icon" href="shrwd.webp" type="image/webp" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Inter:wght@400;600;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
@@ -17,84 +18,90 @@
 <body>
   <header class="top">
     <div class="brand">
-      <span class="logo" aria-hidden="true"></span>
+      <img class="logo" src="shrwd.webp" alt="" width="40" height="40" />
       <div>
         <h1>Sherwood&nbsp;Canvas</h1>
         <p class="tag">on-chain pixel war · Robinhood Chain testnet</p>
       </div>
+    </div>
+    <div class="stats" aria-label="canvas stats">
+      <span class="chip"><b id="st-painted">–</b> painted</span>
+      <span class="chip"><b id="st-players">–</b> players</span>
+      <span class="chip"><b id="st-free">–</b> free</span>
+      <span class="chip week"><b id="st-week">Week –</b> <span id="st-left">–</span></span>
     </div>
     <button id="connect" class="btn primary">Connect wallet</button>
   </header>
 
   <main class="layout">
     <section class="board-wrap">
-      <div class="stats">
-        <span><b id="st-painted">–</b> pixels painted</span>
-        <span><b id="st-players">–</b> players</span>
-        <span><b id="st-free">–</b> free</span>
-        <span class="week"><b id="st-week">Week –</b> · <span id="st-left">–</span></span>
-      </div>
       <div class="board" id="board">
         <canvas id="canvas" width="512" height="512" aria-label="64 by 64 pixel canvas"></canvas>
         <div id="tip" class="tip" hidden></div>
       </div>
-      <p class="hint">Click or drag to select pixels (up to 64), pick a colour, paint. Taking someone's pixel costs ×2 its last price — and they earn half.</p>
+      <p id="focus" class="focus" hidden></p>
+      <p class="hint">Click or drag to pick pixels (up to 64) · taking a pixel costs ×2 its last price — the owner earns half.</p>
     </section>
 
     <aside class="side">
-      <div class="card">
-        <h2>Colour</h2>
-        <div class="palette" id="palette"></div>
-        <label class="custom">custom <input type="color" id="custom" value="#3ddc84" /></label>
-      </div>
+      <a class="boost" id="boost" target="_blank" rel="noopener">
+        <span class="boost-x">×2</span>
+        <span class="boost-body">
+          <b>Hold $SHRWD → double points</b>
+          <span id="boost-sub">Any amount of $SHRWD doubles your weekly points. Get it on vibe/vibe ↗</span>
+        </span>
+      </a>
 
       <div class="card">
-        <h2>Your move</h2>
-        <div class="row"><span>Selected</span><b id="sel-count">0</b></div>
-        <div class="row"><span>Price</span><b id="sel-price">0 ETH</b></div>
-        <div class="actions">
-          <button id="paint" class="btn primary wide" disabled>Paint</button>
-          <button id="clear" class="btn ghost">Clear</button>
+        <div class="palette" id="palette"></div>
+        <div class="move">
+          <label class="custom" title="custom colour"><input type="color" id="custom" value="#a3ff3c" /></label>
+          <span class="sel"><b id="sel-count">0</b> px · <b id="sel-price">0 ETH</b></span>
+          <button id="clear" class="btn ghost small">Clear</button>
         </div>
+        <button id="paint" class="btn primary wide" disabled>Paint</button>
         <p id="status" class="status" role="status"></p>
       </div>
 
-      <div class="card">
-        <h2>You</h2>
-        <div class="row"><span>Pixels held</span><b id="me-owned">–</b></div>
-        <div class="row"><span>Earned (withdrawable)</span><b id="me-credit">–</b></div>
-        <button id="withdraw" class="btn wide" disabled>Withdraw earnings</button>
-      </div>
-
-      <div class="card season">
-        <h2>Week <span id="se-n">–</span> points <small id="se-left"></small></h2>
-        <div class="row"><span>Prize pool</span><b id="se-pool">–</b></div>
-        <div class="row"><span>Your points</span><b id="se-me">connect to see</b></div>
-        <ol id="se-board" class="leaders points"><li class="muted">loading…</li></ol>
-        <p class="fine">New pixel <b>+1</b> · take someone's pixel <b>+3</b> · every pixel you hold when the week ends <b>+1</b>. Weeks reset Monday 00:00 UTC; the pool (the treasury's share of the week's paints) goes 50/30/20 to the top three. The builder's wallet plays but never ranks.</p>
+      <div class="card week-card">
+        <div class="card-head">
+          <div class="tabs" role="tablist">
+            <button class="tab on" data-tab="week" role="tab" aria-selected="true">Week <span id="se-n">–</span></button>
+            <button class="tab" data-tab="land" role="tab" aria-selected="false">Territory</button>
+          </div>
+          <small id="se-left" class="left"></small>
+        </div>
+        <div class="me-line"><span>Your points</span><b id="se-me">connect to see</b></div>
+        <ol id="se-board" class="board-list"><li class="muted">loading…</li></ol>
+        <ol id="leaders" class="board-list" hidden><li class="muted">loading…</li></ol>
+        <p class="fine">+1 new pixel · +3 steal one · +1 per pixel held when the week ends (Mon 00:00 UTC) · <b>×2 with $SHRWD</b>. The builder's wallet never ranks.</p>
         <details id="se-past" hidden><summary>Past weeks</summary><ol id="se-past-list" class="past"></ol></details>
       </div>
 
-      <div class="card">
-        <h2>Most pixels (all time)</h2>
-        <ol id="leaders" class="leaders"><li class="muted">loading…</li></ol>
+      <div class="card you">
+        <div class="row"><span>Pixels held</span><b id="me-owned">–</b></div>
+        <div class="row"><span>Earned from takeovers</span><b id="me-credit">–</b></div>
+        <div class="actions">
+          <button id="withdraw" class="btn small" disabled>Withdraw</button>
+          <button id="share" class="btn share small">Share on 𝕏</button>
+        </div>
       </div>
 
-      <div class="card small">
-        <h2>How to play</h2>
-        <ol class="how">
+      <details class="card how">
+        <summary>How to play · safety</summary>
+        <ol>
           <li><button id="addnet" class="linkbtn">Add Robinhood Chain testnet</button> to your wallet.</li>
-          <li>Get free test ETH from the <a href="https://faucet.testnet.chain.robinhood.com" target="_blank" rel="noopener">faucet</a>.</li>
-          <li>A free pixel costs 0.00001 ETH. Each takeover doubles a pixel's price (max ×256).</li>
+          <li>Free test ETH: <a href="https://faucet.testnet.chain.robinhood.com" target="_blank" rel="noopener">faucet</a>.</li>
+          <li>A free pixel costs 0.00001 ETH; every takeover doubles its price (max ×256).</li>
           <li>When your pixel is taken you earn half of what was paid — withdraw any time.</li>
         </ol>
-        <p class="safe">🛡️ This site only ever asks your wallet for two testnet transactions — <i>paint</i> and <i>withdraw</i> — on a verified contract. It never asks for a signature, a token approval or your recovery phrase. Some wallets warn about any new site; the code is open below.</p>
-        <p class="links">
-          <a id="contract-link" target="_blank" rel="noopener">contract (verified)</a> ·
-          <a id="token-link" target="_blank" rel="noopener" hidden>$SHRWD on vibe/vibe</a> ·
-          <a href="https://github.com/mrtarasyuks/sherwood-canvas" target="_blank" rel="noopener">source</a>
-        </p>
-      </div>
+        <p class="safe">🛡️ This site only asks your wallet for two testnet transactions — <i>paint</i> and <i>withdraw</i> — on a verified contract. Never a signature, a token approval or your recovery phrase. Some wallets warn about any new site; the code is open.</p>
+      </details>
+      <p class="links">
+        <a id="contract-link" target="_blank" rel="noopener">contract ✓</a> ·
+        <a id="token-link" target="_blank" rel="noopener">$SHRWD</a> ·
+        <a href="https://github.com/mrtarasyuks/sherwood-canvas" target="_blank" rel="noopener">source</a>
+      </p>
     </aside>
   </main>
 

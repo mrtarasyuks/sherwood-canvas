@@ -1,10 +1,16 @@
 // Sherwood Canvas — front end. Plain ES module, no build step. Reads the chain through the public RPC; writes through
 // the visitor's own wallet (whichever they pick). Nothing is stored anywhere but the contract.
 import { createPublicClient, createWalletClient, custom, http, formatEther, parseAbi, parseAbiItem } from "https://esm.sh/viem@2.21.0";
-import { score, seasonOf, seasonStart, prize, WEEK } from "./season.js";
+import { score, holdersByWeek, seasonOf, seasonStart } from "./season.js";
 
 const CFG = {
+  site: "https://mrtarasyuks.github.io/sherwood-canvas/",
   address: "0x8ed7ffb34b2a25d866e785843fca0dd899291122",
+  deployBlock: 125869265n,
+  token: "0xB76f7ab3baf2c4220444C73F66793869A811e001", // $SHRWD
+  tokenBlock: 125880429n,
+  tokenUrl: "https://testnet.vibevibe.fun/token/0xB76f7ab3baf2c4220444C73F66793869A811e001",
+  keeper: "0x2973b942305df55b6fb1ed676a39e9741e7e1f62", // the builder's wallet: plays, never ranks
   chainIdHex: "0xb626",
   chain: {
     id: 46630,
@@ -13,9 +19,6 @@ const CFG = {
     rpcUrls: { default: { http: ["https://rpc.testnet.chain.robinhood.com"] } },
     blockExplorers: { default: { name: "Blockscout", url: "https://explorer.testnet.chain.robinhood.com" } },
   },
-  tokenUrl: "https://testnet.vibevibe.fun/token/0xB76f7ab3baf2c4220444C73F66793869A811e001", // $SHRWD on vibe/vibe
-  deployBlock: 125869265n,
-  keeper: "0x2973b942305df55b6fb1ed676a39e9741e7e1f62", // the builder's wallet: plays, never ranks
 };
 const SIZE = 64, N = SIZE * SIZE, MAX_BATCH = 64;
 const BASE = 10n ** 13n; // 0.00001 ETH
@@ -27,9 +30,9 @@ const abi = parseAbi([
   "function owned(address) view returns (uint256)",
   "function credit(address) view returns (uint256)",
   "function withdraw()",
-  "function totalPaints() view returns (uint256)",
 ]);
 const PAINTED = parseAbiItem("event Painted(uint256 indexed id, address indexed painter, address indexed previousOwner, uint24 color, uint256 price)");
+const TRANSFER = parseAbiItem("event Transfer(address indexed from, address indexed to, uint256 value)");
 
 const pub = createPublicClient({ chain: CFG.chain, transport: http() });
 const $ = (id) => document.getElementById(id);
@@ -39,21 +42,25 @@ const eth = (wei) => {
   const s = formatEther(wei);
   return `${Number(s) < 0.001 && wei > 0n ? Number(s).toFixed(6) : Number(s).toFixed(4)} ETH`;
 };
+const ZERO = /^0x0{40}$/i;
 
 /* ------------------------------------------------------------------ state ---- */
 let colors = new Uint8Array(N * 3);
-let owners = new Array(N).fill(null);
+let owners = new Array(N).fill(null); // lower-cased holder or null
 let levels = new Uint8Array(N);
 let account = null;
-let color = "#3ddc84";
+let color = "#a3ff3c";
 const selected = new Set();
 let hover = -1;
+let week = null; // the running week's scores, for the share text
+const focusParam = new URLSearchParams(location.search).get("p");
+const focus = /^0x[0-9a-fA-F]{40}$/.test(focusParam ?? "") ? focusParam.toLowerCase() : null; // ?p=0x… highlights a player's land
 
 /* --------------------------------------------------------------- palette ---- */
-const PALETTE = ["#0d0d0d", "#ffffff", "#e8505b", "#f28c28", "#f2c14e", "#3ddc84", "#1f8a4c", "#5ab0ff",
-  "#2952cc", "#8e5cf6", "#f06fb5", "#8b5a2b", "#7a7a7a", "#c4c4c4", "#00c2c7", "#b6f542"];
+const PALETTE = ["#ffffff", "#111111", "#ff3d3d", "#ff8a1f", "#ffd23f", "#fff36b", "#a3ff3c", "#1fdc6a",
+  "#00ffc3", "#22e1ff", "#3d7bff", "#9b5cff", "#ff3d8b", "#ff9ecf", "#a0522d", "#7c7a99"];
 function renderPalette() {
-  $("palette").innerHTML = PALETTE.map((c) => `<button class="swatch${c === color ? " on" : ""}" style="background:${c}" data-c="${c}" aria-label="${c}"></button>`).join("");
+  $("palette").innerHTML = PALETTE.map((c) => `<button class="swatch${c === color ? " on" : ""}" style="background:${c};color:${c}" data-c="${c}" aria-label="${c}"></button>`).join("");
 }
 $("palette").addEventListener("click", (e) => {
   const c = e.target.closest(".swatch")?.dataset.c;
@@ -71,17 +78,31 @@ const CELL = cv.width / SIZE;
 function draw() {
   for (let i = 0; i < N; i++) {
     const x = (i % SIZE) * CELL, y = Math.floor(i / SIZE) * CELL;
-    if (owners[i]) {
-      ctx.fillStyle = `rgb(${colors[i * 3]},${colors[i * 3 + 1]},${colors[i * 3 + 2]})`;
-    } else {
-      ctx.fillStyle = ((i % SIZE) + Math.floor(i / SIZE)) % 2 ? "#15302a" : "#12291f";
-    }
+    ctx.fillStyle = owners[i]
+      ? `rgb(${colors[i * 3]},${colors[i * 3 + 1]},${colors[i * 3 + 2]})`
+      : ((i % SIZE) + Math.floor(i / SIZE)) % 2 ? "#1d1446" : "#18103c";
     ctx.fillRect(x, y, CELL, CELL);
+  }
+  if (focus) { // outline the edge of that player's territory, not every pixel
+    const mine = (x, y) => x >= 0 && y >= 0 && x < SIZE && y < SIZE && owners[y * SIZE + x] === focus;
+    ctx.strokeStyle = "#ff3d8b";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (let i = 0; i < N; i++) {
+      const x = i % SIZE, y = Math.floor(i / SIZE);
+      if (!mine(x, y)) continue;
+      const L = x * CELL, T = y * CELL, R = L + CELL, B = T + CELL;
+      if (!mine(x, y - 1)) { ctx.moveTo(L, T); ctx.lineTo(R, T); }
+      if (!mine(x, y + 1)) { ctx.moveTo(L, B); ctx.lineTo(R, B); }
+      if (!mine(x - 1, y)) { ctx.moveTo(L, T); ctx.lineTo(L, B); }
+      if (!mine(x + 1, y)) { ctx.moveTo(R, T); ctx.lineTo(R, B); }
+    }
+    ctx.stroke();
   }
   for (const i of selected) {
     const x = (i % SIZE) * CELL, y = Math.floor(i / SIZE) * CELL;
     ctx.fillStyle = color;
-    ctx.globalAlpha = 0.85;
+    ctx.globalAlpha = 0.9;
     ctx.fillRect(x, y, CELL, CELL);
     ctx.globalAlpha = 1;
     ctx.strokeStyle = "#fff";
@@ -89,12 +110,13 @@ function draw() {
     ctx.strokeRect(x + 0.5, y + 0.5, CELL - 1, CELL - 1);
   }
   if (hover >= 0) {
-    ctx.strokeStyle = "#f2c14e";
+    ctx.strokeStyle = "#ffd23f";
     ctx.lineWidth = 2;
     ctx.strokeRect((hover % SIZE) * CELL + 1, Math.floor(hover / SIZE) * CELL + 1, CELL - 2, CELL - 2);
   }
 }
 const priceOf = (i) => (owners[i] ? BASE << BigInt(levels[i]) : BASE);
+const isMe = (a) => !!account && a === account.toLowerCase();
 function cellAt(ev) {
   const r = cv.getBoundingClientRect();
   const x = Math.floor(((ev.clientX - r.left) / r.width) * SIZE), y = Math.floor(((ev.clientY - r.top) / r.height) * SIZE);
@@ -121,10 +143,10 @@ cv.addEventListener("pointermove", (ev) => {
   const tip = $("tip");
   if (i >= 0 && ev.pointerType === "mouse") {
     const x = i % SIZE, y = Math.floor(i / SIZE);
-    tip.textContent = `(${x}, ${y}) · ${owners[i] ? `held by ${short(owners[i])}${account && owners[i].toLowerCase() === account.toLowerCase() ? " (you)" : ""}` : "free"} · ${eth(priceOf(i))}`;
+    tip.textContent = `(${x}, ${y}) · ${owners[i] ? `held by ${short(owners[i])}${isMe(owners[i]) ? " (you)" : ""}` : "free"} · ${eth(priceOf(i))}`;
     const r = $("board").getBoundingClientRect();
-    tip.style.left = `${Math.min(ev.clientX - r.left, r.width - 220)}px`;
-    tip.style.top = `${ev.clientY - r.top}px`;
+    tip.style.left = `${Math.min(ev.clientX - r.left, r.width - 230)}px`;
+    tip.style.top = `${Math.min(ev.clientY - r.top, r.height - 40)}px`;
     tip.hidden = false;
   } else tip.hidden = true;
   draw();
@@ -140,7 +162,7 @@ function updateSelection() {
   $("sel-count").textContent = `${selected.size}${selected.size >= MAX_BATCH ? " (max)" : ""}`;
   $("sel-price").textContent = eth(total);
   $("paint").disabled = selected.size === 0;
-  $("paint").textContent = account ? `Paint ${selected.size || ""}`.trim() : "Connect & paint";
+  $("paint").textContent = !selected.size ? "Pick pixels on the canvas" : account ? `Paint ${selected.size} px` : "Connect & paint";
   draw();
 }
 $("clear").addEventListener("click", () => { selected.clear(); updateSelection(); });
@@ -152,7 +174,7 @@ async function load() {
   for (let i = 0; i < N * 3; i++) colors[i] = parseInt(bytes.slice(i * 2, i * 2 + 2), 16);
   const chunks = await Promise.all([0, 1, 2, 3].map((k) => pub.readContract({ address: CFG.address, abi, functionName: "pixelsRange", args: [BigInt(k * 1024), 1024n] })));
   chunks.forEach(([o, l], k) => o.forEach((a, j) => {
-    owners[k * 1024 + j] = /^0x0{40}$/i.test(a) ? null : a;
+    owners[k * 1024 + j] = ZERO.test(a) ? null : a.toLowerCase();
     levels[k * 1024 + j] = Number(l[j]);
   }));
   const counts = new Map();
@@ -163,8 +185,13 @@ async function load() {
   $("st-free").textContent = (N - painted).toLocaleString("en");
   const top = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10);
   $("leaders").innerHTML = top.length
-    ? top.map(([a, n]) => `<li class="${account && a.toLowerCase() === account.toLowerCase() ? "me" : ""}"><b>${short(a)}</b> — ${n} px</li>`).join("")
+    ? top.map(([a, n]) => `<li class="${isMe(a) ? "me" : ""}"><span><b>${short(a)}</b></span><span class="pts">${n} px</span></li>`).join("")
     : `<li class="muted">empty canvas — be the first!</li>`;
+  if (focus) {
+    const n = counts.get(focus) ?? 0;
+    $("focus").textContent = n ? `🎯 ${short(focus)} holds ${n} px (outlined in pink) — take them!` : `🎯 ${short(focus)} holds no pixels right now.`;
+    $("focus").hidden = false;
+  }
   if (account) {
     const [own, cr] = await Promise.all([
       pub.readContract({ address: CFG.address, abi, functionName: "owned", args: [account] }),
@@ -184,34 +211,43 @@ async function load() {
 }
 
 /* ---------------------------------------------------------------- seasons ---- */
-// Weekly points are computed from the contract's Painted events (rules in season.js), so the table is the same for
-// everyone and anyone can recompute it.
-const events = []; // decoded Painted events in chain order
-let logsTo = CFG.deployBlock - 1n;
-const boundary = new Map(); // week n → its first block
-const ZERO = /^0x0{40}$/i;
-async function fetchLogs(latest) {
-  if (latest <= logsTo) return;
-  const from = logsTo + 1n, q = (fromBlock, toBlock) => pub.getLogs({ address: CFG.address, event: PAINTED, fromBlock, toBlock });
-  let got;
-  try {
-    got = await q(from, latest);
-  } catch { // the RPC refused the range: walk it in slices
-    got = [];
-    for (let a = from; a <= latest; a += 1_000_000n) got.push(...(await q(a, a + 999_999n < latest ? a + 999_999n : latest)));
-  }
-  got.sort((x, y) => (x.blockNumber === y.blockNumber ? x.logIndex - y.logIndex : x.blockNumber < y.blockNumber ? -1 : 1));
-  for (const l of got) {
-    events.push({
-      block: l.blockNumber,
-      id: Number(l.args.id),
-      painter: l.args.painter.toLowerCase(),
-      prev: ZERO.test(l.args.previousOwner) ? null : l.args.previousOwner.toLowerCase(),
-      price: l.args.price,
-    });
-  }
-  logsTo = latest;
+// Weekly points come from the contract's Painted events and $SHRWD's Transfer events (rules in season.js), so the
+// table is the same for everyone and anyone can recompute it.
+function logFeed(address, event, fromBlock, map) {
+  const items = [];
+  let to = fromBlock - 1n;
+  return {
+    items,
+    async sync(latest) {
+      if (latest <= to) return;
+      const from = to + 1n, q = (a, b) => pub.getLogs({ address, event, fromBlock: a, toBlock: b });
+      let got;
+      try {
+        got = await q(from, latest);
+      } catch { // the RPC refused the range: walk it in slices
+        got = [];
+        for (let a = from; a <= latest; a += 1_000_000n) got.push(...(await q(a, a + 999_999n < latest ? a + 999_999n : latest)));
+      }
+      got.sort((x, y) => (x.blockNumber === y.blockNumber ? x.logIndex - y.logIndex : x.blockNumber < y.blockNumber ? -1 : 1));
+      for (const l of got) items.push(map(l));
+      to = latest;
+    },
+  };
 }
+const paints = logFeed(CFG.address, PAINTED, CFG.deployBlock, (l) => ({
+  block: l.blockNumber,
+  id: Number(l.args.id),
+  painter: l.args.painter.toLowerCase(),
+  prev: ZERO.test(l.args.previousOwner) ? null : l.args.previousOwner.toLowerCase(),
+  price: l.args.price,
+}));
+const transfers = logFeed(CFG.token, TRANSFER, CFG.tokenBlock, (l) => ({
+  block: l.blockNumber,
+  from: l.args.from.toLowerCase(),
+  to: l.args.to.toLowerCase(),
+  value: l.args.value,
+}));
+const boundary = new Map(); // week n → its first block
 async function firstBlockAt(ts, hi) {
   const key = `sc-week-${ts}`;
   try { const c = localStorage.getItem(key); if (c) return BigInt(c); } catch {}
@@ -230,13 +266,16 @@ async function updateSeason() {
   const latest = await pub.getBlock();
   const current = seasonOf(Number(latest.timestamp));
   for (let n = 2; n <= current; n++) if (!boundary.has(n)) boundary.set(n, await firstBlockAt(seasonStart(n), latest.number));
-  await fetchLogs(latest.number);
+  await Promise.all([paints.sync(latest.number), transfers.sync(latest.number)]);
   const weekOf = (block) => { let n = 1; while (boundary.has(n + 1) && block >= boundary.get(n + 1)) n++; return n; };
-  renderSeason(score(events.map((e) => ({ ...e, season: weekOf(e.block) })), current, new Set([CFG.keeper])), current);
+  const weeks = Array.from({ length: current }, (_, k) => ({ n: k + 1, end: k + 1 < current ? boundary.get(k + 2) : null }));
+  const holders = holdersByWeek(transfers.items, weeks);
+  const seasons = score(paints.items.map((e) => ({ ...e, season: weekOf(e.block) })), current, new Set([CFG.keeper]), holders);
+  renderSeason(seasons, current, holders.get(current));
 }
-const MEDAL = ["🥇", "🥈", "🥉"];
-function renderSeason(seasons, current) {
+function renderSeason(seasons, current, holdersNow) {
   const s = seasons.get(current);
+  week = s;
   const left = seasonStart(current + 1) - Math.floor(Date.now() / 1000);
   const d = Math.floor(left / 86400), h = Math.floor((left % 86400) / 3600), m = Math.floor((left % 3600) / 60);
   const leftText = left <= 0 ? "closing…" : d ? `${d}d ${h}h left` : `${h}h ${m}m left`;
@@ -244,17 +283,36 @@ function renderSeason(seasons, current) {
   $("se-left").textContent = leftText;
   $("st-week").textContent = `Week ${current}`;
   $("st-left").textContent = leftText;
-  $("se-pool").textContent = eth(s.pool);
+
   const me = account?.toLowerCase() ?? null;
+  const mine = me ? s.rows.get(me) : null;
+  const holder = !!me && holdersNow.has(me);
   const rank = me ? s.ranked.findIndex((r) => r.addr === me) : -1;
-  $("se-me").textContent = !me ? "connect to see" : me === CFG.keeper ? "builder — doesn't rank" : `${s.rows.get(me)?.points ?? 0} pts${rank >= 0 ? ` · #${rank + 1}` : ""}`;
+  $("se-me").innerHTML = !me ? "connect to see"
+    : me === CFG.keeper ? "builder — doesn't rank"
+    : `${mine?.points ?? 0} pts${holder ? '<span class="x2">×2</span>' : ""}${rank >= 0 ? ` · #${rank + 1}` : ""}`;
+  $("boost").classList.toggle("on", holder);
+  $("boost-sub").textContent = holder
+    ? "✓ You hold $SHRWD — your points are doubled this week."
+    : me && mine?.base
+      ? `You'd have ${mine.base * 2} pts instead of ${mine.base}. Any amount of $SHRWD doubles them — get it on vibe/vibe ↗`
+      : "Any amount of $SHRWD doubles your weekly points. Get it on vibe/vibe ↗";
+
   $("se-board").innerHTML = s.ranked.length
-    ? s.ranked.slice(0, 10).map((r, i) => `<li class="${r.addr === me ? "me" : ""}"><b>${short(r.addr)}</b> — ${r.points} pts${i < 3 && s.pool > 0n ? ` <span class="prize">${MEDAL[i]} ${eth(prize(s, i))}</span>` : ""}<span class="split">${r.free} new · ${r.steal} taken · ${r.held} held</span></li>`).join("")
+    ? s.ranked.slice(0, 8).map((r) => `<li class="${r.addr === me ? "me" : ""}"><span><b>${short(r.addr)}</b>${r.holder ? '<span class="x2">×2</span>' : ""}</span><span class="pts">${r.points} pts</span><span class="split">${r.free} new · ${r.steal} taken · ${r.held} held</span></li>`).join("")
     : `<li class="muted">no points yet this week — paint first!</li>`;
   const past = [...seasons.values()].filter((x) => x.n < current).sort((a, b) => b.n - a.n);
   $("se-past").hidden = past.length === 0;
-  $("se-past-list").innerHTML = past.map((x) => `<li><b>Week ${x.n}</b> · pool ${eth(x.pool)}<br>${x.ranked.slice(0, 3).map((r, i) => `${MEDAL[i]} ${short(r.addr)} ${r.points} pts → ${eth(prize(x, i))}`).join("<br>") || "<span class=\"muted\">nobody scored</span>"}</li>`).join("");
+  $("se-past-list").innerHTML = past.map((x) => `<li><b>Week ${x.n}</b><br>${x.ranked.slice(0, 3).map((r, i) => `${["🥇", "🥈", "🥉"][i]} ${short(r.addr)} — ${r.points} pts${r.holder ? " (×2)" : ""}`).join("<br>") || '<span class="muted">nobody scored</span>'}</li>`).join("");
 }
+document.querySelector(".tabs").addEventListener("click", (e) => {
+  const t = e.target.closest(".tab");
+  if (!t) return;
+  for (const b of document.querySelectorAll(".tab")) { b.classList.toggle("on", b === t); b.setAttribute("aria-selected", String(b === t)); }
+  $("se-board").hidden = t.dataset.tab !== "week";
+  $("leaders").hidden = t.dataset.tab !== "land";
+  $("se-me").parentElement.hidden = t.dataset.tab !== "week";
+});
 
 /* ----------------------------------------------------------------- wallet ---- */
 const status = (msg, kind = "") => { const s = $("status"); s.textContent = msg; s.className = `status ${kind}`; };
@@ -330,7 +388,7 @@ $("addnet").addEventListener("click", async () => {
 });
 
 const wallet = () => createWalletClient({ account, chain: CFG.chain, transport: custom(provider) });
-async function explorerTx(hash) { return `${CFG.chain.blockExplorers.default.url}/tx/${hash}`; }
+const explorerTx = (hash) => `${CFG.chain.blockExplorers.default.url}/tx/${hash}`;
 // The transaction goes to the wallet complete — gas, fees and nonce come from the public RPC — so wallets that can't
 // look this testnet up themselves (Zerion answers "404") still have everything they need. It also turns a would-be
 // revert into a clear message here instead of a confusing wallet screen.
@@ -358,7 +416,7 @@ $("paint").addEventListener("click", async () => {
     if (r.status !== "success") throw new Error("transaction reverted");
     selected.clear();
     status("", "ok");
-    $("status").innerHTML = `Painted ✓ <a href="${await explorerTx(hash)}" target="_blank" rel="noopener">view tx</a>`;
+    $("status").innerHTML = `Painted ✓ <a href="${explorerTx(hash)}" target="_blank" rel="noopener">view tx</a>`;
     await load();
   } catch (e) {
     status(e.shortMessage ?? e.message ?? String(e), "err");
@@ -377,9 +435,22 @@ $("withdraw").addEventListener("click", async () => {
   }
 });
 
+/* ------------------------------------------------------------------ share ---- */
+$("share").addEventListener("click", () => {
+  const me = account?.toLowerCase() ?? null;
+  const held = me ? owners.filter((a) => a === me).length : 0;
+  const pts = (me && week?.rows.get(me)?.points) || 0;
+  const text = held
+    ? `I hold ${held} px on Sherwood Canvas 🏹 an on-chain pixel war on Robinhood Chain${pts ? ` (${pts} pts this week)` : ""}. Come take them 👇 $SHRWD`
+    : "Sherwood Canvas 🏹 an on-chain pixel war on Robinhood Chain. Paint a pixel, steal a pixel, earn when yours is taken. Hold $SHRWD for ×2 points 👇";
+  const url = held ? `${CFG.site}?p=${me}` : CFG.site;
+  window.open(`https://x.com/intent/post?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`, "_blank", "noopener");
+});
+
 /* ------------------------------------------------------------------- boot ---- */
 $("contract-link").href = `${CFG.chain.blockExplorers.default.url}/address/${CFG.address}?tab=contract`;
-if (CFG.tokenUrl) { $("token-link").href = CFG.tokenUrl; $("token-link").hidden = false; }
+$("token-link").href = CFG.tokenUrl;
+$("boost").href = CFG.tokenUrl;
 renderPalette();
 draw();
 load().catch((e) => status(`Can't read the canvas: ${e.shortMessage ?? e.message}`, "err"));

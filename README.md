@@ -16,10 +16,10 @@ Every week (Monday 00:00 UTC → next Monday) is a season, scored straight from 
 | paint a free pixel | +1 |
 | take someone else's pixel | +3 |
 | every pixel you hold when the week ends | +1 |
+| **hold any $SHRWD** (at week end) | **×2** |
 
-Repainting your own pixel scores nothing. The week's prize pool is the treasury's share of that week's paints, split
-50/30/20 between the top three. The builder's wallet plays but never ranks. Scoring lives in `docs/season.js` — anyone
-can re-run it.
+Repainting your own pixel scores nothing. $SHRWD holdings are rebuilt from the token's `Transfer` events, so past
+weeks stay fixed. The builder's wallet plays but never ranks. Scoring lives in `docs/season.js` — anyone can re-run it.
 
 **Play:** https://mrtarasyuks.github.io/sherwood-canvas/
 **Contract (verified):** [`0x8ed7ffb34b2a25d866e785843fca0dd899291122`](https://explorer.testnet.chain.robinhood.com/address/0x8ed7ffb34b2a25d866e785843fca0dd899291122?tab=contract) on Robinhood Chain testnet (chainId 46630)
