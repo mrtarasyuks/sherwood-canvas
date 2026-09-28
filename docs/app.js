@@ -12,7 +12,7 @@ const CFG = {
     rpcUrls: { default: { http: ["https://rpc.testnet.chain.robinhood.com"] } },
     blockExplorers: { default: { name: "Blockscout", url: "https://explorer.testnet.chain.robinhood.com" } },
   },
-  tokenUrl: null, // set once the vibe/vibe token is live
+  tokenUrl: "https://testnet.vibevibe.fun/token/0xB76f7ab3baf2c4220444C73F66793869A811e001", // $SHRWD on vibe/vibe
 };
 const SIZE = 64, N = SIZE * SIZE, MAX_BATCH = 64;
 const BASE = 10n ** 13n; // 0.00001 ETH

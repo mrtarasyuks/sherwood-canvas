@@ -10,6 +10,8 @@ An on-chain pixel war on **Robinhood Chain testnet**. A shared 64×64 canvas tha
 **Play:** https://mrtarasyuks.github.io/sherwood-canvas/
 **Contract (verified):** [`0x8ed7ffb34b2a25d866e785843fca0dd899291122`](https://explorer.testnet.chain.robinhood.com/address/0x8ed7ffb34b2a25d866e785843fca0dd899291122?tab=contract) on Robinhood Chain testnet (chainId 46630)
 
+**Token:** [$SHRWD on vibe/vibe](https://testnet.vibevibe.fun/token/0xB76f7ab3baf2c4220444C73F66793869A811e001)
+
 Free test ETH: https://faucet.testnet.chain.robinhood.com
 
 ## Repo
