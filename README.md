@@ -15,5 +15,5 @@ Free test ETH: https://faucet.testnet.chain.robinhood.com
 ## Repo
 
 - `contracts/SherwoodCanvas.sol` — the game (no owner powers over pixels; payouts are pull-based).
-- `site/` — the static front end (plain HTML + JS, reads the chain directly, writes through your wallet).
+- `docs/` — the static front end (served by GitHub Pages) (plain HTML + JS, reads the chain directly, writes through your wallet).
 - `scripts/test.mjs` — 32 local EVM tests (`npm i && npm run build && node scripts/test.mjs`).
