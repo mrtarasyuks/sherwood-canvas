@@ -323,8 +323,6 @@ window.addEventListener("eip6963:announceProvider", (e) => {
 });
 window.dispatchEvent(new Event("eip6963:requestProvider"));
 let provider = null; // the chosen wallet
-const remember = (rdns) => { try { localStorage.setItem("sc-wallet", rdns); } catch {} };
-const remembered = () => { try { return localStorage.getItem("sc-wallet"); } catch { return null; } };
 function pickWallet() {
   if (wallets.length <= 1) return Promise.resolve(wallets[0]?.provider ?? window.ethereum ?? null);
   const dlg = $("wallet-pick"), list = $("wallet-list");
@@ -341,7 +339,6 @@ function pickWallet() {
     list.onclick = (e) => {
       const w = wallets.find((x) => x.info.uuid === e.target.closest(".wallet-opt")?.dataset.uuid);
       if (!w) return;
-      remember(w.info.rdns);
       dlg.close();
       resolve(w.provider);
     };
@@ -455,16 +452,5 @@ renderPalette();
 draw();
 load().catch((e) => status(`Can't read the canvas: ${e.shortMessage ?? e.message}`, "err"));
 setInterval(() => load().catch(() => {}), 12000);
-// already connected earlier? pick that wallet back up silently (eth_accounts never opens a prompt)
-setTimeout(() => {
-  const w = wallets.find((x) => x.info.rdns === remembered()) ?? (wallets.length === 1 ? wallets[0] : null);
-  const p = w?.provider ?? (wallets.length ? null : window.ethereum);
-  p?.request({ method: "eth_accounts" }).then((a) => {
-    if (!a?.[0]) return;
-    provider = p;
-    watch(p);
-    account = a[0];
-    $("connect").textContent = short(account);
-    load();
-  }).catch(() => {});
-}, 300);
+// No wallet is touched until the player presses Connect: just looking at the board never wakes a wallet extension
+// (Zerion, for one, pops its site warning on the first wallet call).
