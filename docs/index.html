@@ -32,6 +32,7 @@
         <span><b id="st-painted">–</b> pixels painted</span>
         <span><b id="st-players">–</b> players</span>
         <span><b id="st-free">–</b> free</span>
+        <span class="week"><b id="st-week">Week –</b> · <span id="st-left">–</span></span>
       </div>
       <div class="board" id="board">
         <canvas id="canvas" width="512" height="512" aria-label="64 by 64 pixel canvas"></canvas>
@@ -65,8 +66,17 @@
         <button id="withdraw" class="btn wide" disabled>Withdraw earnings</button>
       </div>
 
+      <div class="card season">
+        <h2>Week <span id="se-n">–</span> points <small id="se-left"></small></h2>
+        <div class="row"><span>Prize pool</span><b id="se-pool">–</b></div>
+        <div class="row"><span>Your points</span><b id="se-me">connect to see</b></div>
+        <ol id="se-board" class="leaders points"><li class="muted">loading…</li></ol>
+        <p class="fine">New pixel <b>+1</b> · take someone's pixel <b>+3</b> · every pixel you hold when the week ends <b>+1</b>. Weeks reset Monday 00:00 UTC; the pool (the treasury's share of the week's paints) goes 50/30/20 to the top three. The builder's wallet plays but never ranks.</p>
+        <details id="se-past" hidden><summary>Past weeks</summary><ol id="se-past-list" class="past"></ol></details>
+      </div>
+
       <div class="card">
-        <h2>Leaderboard</h2>
+        <h2>Most pixels (all time)</h2>
         <ol id="leaders" class="leaders"><li class="muted">loading…</li></ol>
       </div>
 
@@ -78,14 +88,21 @@
           <li>A free pixel costs 0.00001 ETH. Each takeover doubles a pixel's price (max ×256).</li>
           <li>When your pixel is taken you earn half of what was paid — withdraw any time.</li>
         </ol>
+        <p class="safe">🛡️ This site only ever asks your wallet for two testnet transactions — <i>paint</i> and <i>withdraw</i> — on a verified contract. It never asks for a signature, a token approval or your recovery phrase. Some wallets warn about any new site; the code is open below.</p>
         <p class="links">
           <a id="contract-link" target="_blank" rel="noopener">contract (verified)</a> ·
-          <a id="token-link" target="_blank" rel="noopener" hidden>$SHRWD on vibe/vibe</a>
+          <a id="token-link" target="_blank" rel="noopener" hidden>$SHRWD on vibe/vibe</a> ·
           <a href="https://github.com/mrtarasyuks/sherwood-canvas" target="_blank" rel="noopener">source</a>
         </p>
       </div>
     </aside>
   </main>
+
+  <dialog id="wallet-pick" class="pick" aria-labelledby="pick-title">
+    <h2 id="pick-title">Choose a wallet</h2>
+    <div id="wallet-list" class="wallet-list"></div>
+    <form method="dialog"><button class="btn ghost wide">Cancel</button></form>
+  </dialog>
 
   <script type="module" src="app.js"></script>
 </body>
