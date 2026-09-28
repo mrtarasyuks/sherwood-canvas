@@ -1,0 +1,14 @@
+import solc from "solc";
+import { readFileSync, writeFileSync } from "node:fs";
+const dep = JSON.parse(readFileSync("build/deployment.json", "utf8"));
+const input = { language: "Solidity", sources: { "SherwoodCanvas.sol": { content: readFileSync("contracts/SherwoodCanvas.sol", "utf8") } }, settings: { optimizer: { enabled: true, runs: 500 }, evmVersion: "shanghai", outputSelection: { "*": { "*": ["abi", "evm.bytecode.object"] } } } };
+const version = "v" + solc.version().replace(".Emscripten.clang", "");
+console.log("compiler", version, "address", dep.address);
+const fd = new FormData();
+fd.append("compiler_version", version);
+fd.append("contract_name", "SherwoodCanvas");
+fd.append("license_type", "mit");
+fd.append("autodetect_constructor_args", "true");
+fd.append("files[0]", new Blob([JSON.stringify(input)], { type: "application/json" }), "input.json");
+const r = await fetch(`https://explorer.testnet.chain.robinhood.com/api/v2/smart-contracts/${dep.address}/verification/via/standard-input`, { method: "POST", body: fd });
+console.log("verify:", r.status, (await r.text()).slice(0, 300));

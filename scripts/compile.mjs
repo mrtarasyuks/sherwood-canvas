@@ -1,0 +1,12 @@
+import solc from "solc";
+import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+const src = readFileSync("contracts/SherwoodCanvas.sol", "utf8");
+const input = { language: "Solidity", sources: { "SherwoodCanvas.sol": { content: src } }, settings: { optimizer: { enabled: true, runs: 500 }, evmVersion: "shanghai", outputSelection: { "*": { "*": ["abi", "evm.bytecode.object", "evm.deployedBytecode.object"] } } } };
+const out = JSON.parse(solc.compile(JSON.stringify(input)));
+const errs = (out.errors ?? []).filter((e) => e.severity === "error");
+for (const e of out.errors ?? []) console.log(e.severity, e.formattedMessage);
+if (errs.length) process.exit(1);
+const c = out.contracts["SherwoodCanvas.sol"].SherwoodCanvas;
+mkdirSync("build", { recursive: true });
+writeFileSync("build/SherwoodCanvas.json", JSON.stringify({ abi: c.abi, bytecode: "0x" + c.evm.bytecode.object }, null, 1));
+console.log("compiled: bytecode", c.evm.bytecode.object.length / 2, "bytes, runtime", c.evm.deployedBytecode.object.length / 2, "bytes, abi", c.abi.length, "entries");
