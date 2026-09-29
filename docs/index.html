@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Sherwood Canvas — on-chain pixel war on Robinhood Chain</title>
-  <meta name="description" content="A shared 64×64 canvas on Robinhood Chain. Paint a pixel, steal a pixel — when someone takes yours, you earn half. Hold $SHRWD for ×2 weekly points." />
+  <meta name="description" content="A shared 64×64 canvas on Robinhood Chain testnet. Paint a pixel, steal a pixel — when someone takes yours, you earn half. Hold $SHRWD for ×2 weekly points." />
   <meta property="og:title" content="Sherwood Canvas 🏹" />
   <meta property="og:description" content="On-chain pixel war on Robinhood Chain testnet. Take pixels, earn when they're taken. Hold $SHRWD for ×2 points." />
   <meta property="og:image" content="https://mrtarasyuks.github.io/sherwood-canvas/shrwd.webp" />
@@ -21,7 +21,7 @@
       <img class="logo" src="shrwd.webp" alt="" width="40" height="40" />
       <div>
         <h1>Sherwood&nbsp;Canvas</h1>
-        <p class="tag">on-chain pixel war · Robinhood Chain testnet</p>
+        <p class="tag"><span class="tag-text">on-chain pixel war · Robinhood Chain</span> <span class="testnet">testnet · no real money</span></p>
       </div>
     </div>
     <div class="stats" aria-label="canvas stats">
@@ -30,20 +30,46 @@
       <span class="chip"><b id="st-free">–</b> free</span>
       <span class="chip week"><b id="st-week">Week –</b> <span id="st-left">–</span></span>
     </div>
-    <button id="connect" class="btn primary">Connect wallet</button>
+    <div class="acct">
+      <button id="connect" class="btn primary" aria-haspopup="true" aria-expanded="false">Connect wallet</button>
+      <div id="acct-menu" class="acct-menu" hidden>
+        <div class="acct-row"><span class="dot" id="acct-dot"></span><b id="acct-addr">–</b><button id="acct-copy" class="linkbtn" type="button">copy</button></div>
+        <div class="acct-row dim">Wallet <b id="acct-wallet">–</b></div>
+        <div class="acct-row dim">Network <b id="acct-net">–</b></div>
+        <div class="acct-row dim">Balance <b id="acct-bal">–</b></div>
+        <button id="acct-switch" class="btn small wide" hidden>Switch to Robinhood Chain</button>
+        <a id="acct-explorer" class="btn ghost small wide" target="_blank" rel="noopener">View on explorer ↗</a>
+        <button id="acct-off" class="btn ghost small wide">Disconnect</button>
+      </div>
+    </div>
   </header>
 
   <main class="layout">
     <section class="board-wrap">
       <div class="board" id="board">
-        <canvas id="canvas" width="512" height="512" aria-label="64 by 64 pixel canvas"></canvas>
+        <div class="scroller" id="scroller"><canvas id="canvas" width="512" height="512" aria-label="64 by 64 pixel canvas"></canvas></div>
+        <div class="zoom" role="group" aria-label="Zoom">
+          <button id="zoom-out" type="button" aria-label="Zoom out" disabled>−</button>
+          <span id="zoom-lvl">1×</span>
+          <button id="zoom-in" type="button" aria-label="Zoom in">+</button>
+          <button id="pan" type="button" aria-pressed="false" title="Move around the canvas" hidden>✋</button>
+        </div>
         <div id="tip" class="tip" hidden></div>
       </div>
       <p id="focus" class="focus" hidden></p>
-      <p class="hint">Click or drag to pick pixels (up to 64) · taking a pixel costs ×2 its last price — the owner earns half.</p>
+      <p class="hint" id="hint">Click or drag to pick pixels (up to 64) · taking a pixel costs ×2 its last price — the owner earns half.</p>
     </section>
 
     <aside class="side">
+      <div class="card ready" id="ready" hidden>
+        <h2>Get ready to paint</h2>
+        <ol class="steps">
+          <li id="step-wallet"><span class="mark"></span><div><b>Wallet</b><span class="sub" id="step-wallet-sub"></span><div class="step-act" id="step-wallet-act"></div></div></li>
+          <li id="step-net"><span class="mark"></span><div><b>Robinhood Chain testnet</b><span class="sub" id="step-net-sub"></span><div class="step-act" id="step-net-act"></div></div></li>
+          <li id="step-eth"><span class="mark"></span><div><b>Free test ETH</b><span class="sub" id="step-eth-sub"></span><div class="step-act" id="step-eth-act"></div></div></li>
+        </ol>
+      </div>
+
       <a class="boost" id="boost" target="_blank" rel="noopener">
         <span class="boost-x">×2</span>
         <span class="boost-body">
@@ -60,7 +86,7 @@
           <button id="clear" class="btn ghost small">Clear</button>
         </div>
         <button id="paint" class="btn primary wide" disabled>Paint</button>
-        <p id="status" class="status" role="status"></p>
+        <p id="status" class="status" role="status" aria-live="polite"></p>
       </div>
 
       <div class="card week-card">
@@ -68,13 +94,15 @@
           <div class="tabs" role="tablist">
             <button class="tab on" data-tab="week" role="tab" aria-selected="true">Week <span id="se-n">–</span></button>
             <button class="tab" data-tab="land" role="tab" aria-selected="false">Territory</button>
+            <button class="tab" data-tab="live" role="tab" aria-selected="false">Live</button>
           </div>
           <small id="se-left" class="left"></small>
         </div>
-        <div class="me-line"><span>Your points</span><b id="se-me">connect to see</b></div>
+        <div class="me-line" id="me-line"><span>Your points</span><b id="se-me">connect to see</b></div>
         <ol id="se-board" class="board-list"><li class="muted">loading…</li></ol>
         <ol id="leaders" class="board-list" hidden><li class="muted">loading…</li></ol>
-        <p class="fine">+1 new pixel · +3 steal one · +1 per pixel held when the week ends (Mon 00:00 UTC) · <b>×2 with $SHRWD</b>. The builder's wallet never ranks.</p>
+        <ul id="live" class="live" hidden><li class="muted">loading…</li></ul>
+        <p class="fine" id="rules">+1 new pixel · +3 steal one · +1 per pixel held when the week ends (Mon 00:00 UTC) · <b>×2 with $SHRWD</b>. The builder's wallet never ranks.</p>
         <details id="se-past" hidden><summary>Past weeks</summary><ol id="se-past-list" class="past"></ol></details>
       </div>
 
@@ -88,19 +116,22 @@
       </div>
 
       <details class="card how">
-        <summary>How to play · safety</summary>
-        <ol>
-          <li><button id="addnet" class="linkbtn">Add Robinhood Chain testnet</button> to your wallet.</li>
-          <li>Free test ETH: <a href="https://faucet.testnet.chain.robinhood.com" target="_blank" rel="noopener">faucet</a>.</li>
-          <li>A free pixel costs 0.00001 ETH; every takeover doubles its price (max ×256).</li>
-          <li>When your pixel is taken you earn half of what was paid — withdraw any time.</li>
-        </ol>
-        <p class="safe">🛡️ This site only asks your wallet for two testnet transactions — <i>paint</i> and <i>withdraw</i> — on a verified contract. Never a signature, a token approval or your recovery phrase. Some wallets warn about any new site; the code is open.</p>
+        <summary>How it works · fair play</summary>
+        <ul>
+          <li><b>Testnet only.</b> Robinhood Chain testnet ETH is free and worth nothing; $SHRWD is a testnet token on vibe/vibe.</li>
+          <li><b>Where your ETH goes.</b> A free pixel costs 0.00001 ETH. Taking someone's pixel costs ×2 its last price (max ×256): half goes to that player as credit you can withdraw any time, half to the canvas treasury. A new pixel goes fully to the treasury.</li>
+          <li><b>The treasury.</b> Only the builder's wallet (<a id="keeper-link" target="_blank" rel="noopener">0x2973…1F62</a>) can withdraw it. Nothing is promised from it.</li>
+          <li><b>The builder plays too.</b> That wallet painted the hat, the arrow and “Vibe”, and holds $SHRWD — it never ranks in the weekly table.</li>
+          <li><b>Points are public.</b> Computed from on-chain events by open code (<a href="https://github.com/mrtarasyuks/sherwood-canvas/blob/main/docs/season.js" target="_blank" rel="noopener">season.js</a>) — anyone can recompute them.</li>
+          <li><b>Your wallet stays yours.</b> The site only asks for two transactions — <i>paint</i> and <i>withdraw</i> — on a <a id="contract-link2" target="_blank" rel="noopener">verified contract</a>. Never a signature, a token approval or a recovery phrase.</li>
+        </ul>
+        <p class="safe">Stuck? <button id="addnet" class="linkbtn">Add Robinhood Chain testnet</button> to your wallet · get test ETH at the <a href="https://faucet.testnet.chain.robinhood.com" target="_blank" rel="noopener">faucet</a>.</p>
       </details>
       <p class="links">
         <a id="contract-link" target="_blank" rel="noopener">contract ✓</a> ·
         <a id="token-link" target="_blank" rel="noopener">$SHRWD</a> ·
-        <a href="https://github.com/mrtarasyuks/sherwood-canvas" target="_blank" rel="noopener">source</a>
+        <a href="https://github.com/mrtarasyuks/sherwood-canvas" target="_blank" rel="noopener">source</a> ·
+        by <a href="https://x.com/berleco" target="_blank" rel="noopener">@berleco</a>
       </p>
     </aside>
   </main>
